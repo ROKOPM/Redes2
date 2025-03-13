@@ -4,7 +4,8 @@ import os
 class Server:
     def __init__(self):
         self.server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.server.bind(("", 5555))
+        self.server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)  # Permitir reutilizar el puerto
+        self.server.bind(("", 65432))
         self.server.listen(1)
         print("Escuchando para conexiones entrantes.")
         self.client, _ = self.server.accept()
@@ -21,7 +22,11 @@ class Server:
 
     def cerrar_socket(self):
         self.client.close()
+        self.server.close()
         print("Socket cerrado, cliente desconectado.")
+
+    def __del__(self):
+        self.cerrar_socket()
 
 class Matrix:
     def __init__(self):
@@ -38,25 +43,26 @@ class Matrix:
         os.system("cls" if os.name == "nt" else "clear")
         self.mostrar()
 
-    def cast(self, pos):
-        return int(pos) - 48
-
 def main():
     servidor = Server()
     matrix = Matrix()
     matrix.mostrar()
 
-    while True:
-        print("Turno del jugador Cliente X.")
-        charpos = servidor.recibir()[0]
-        pos = int(charpos)
-        matrix.agregar('X', pos)
+    try:
+        while True:
+            print("Turno del jugador Cliente X.")
+            charpos = servidor.recibir()[0]
+            pos = int(charpos)
+            matrix.agregar('X', pos)
 
-        print("\tEs tu turno jugador O.")
-        charpos = input("Inserta la posición: ")
-        pos = int(charpos)
-        matrix.agregar('O', pos)
-        servidor.enviar(charpos)
+            print("\tEs tu turno jugador O.")
+            charpos = input("Inserta la posición: ")
+            pos = int(charpos)
+            matrix.agregar('O', pos)
+            servidor.enviar(charpos)
+    except KeyboardInterrupt:
+        print("\nCerrando el servidor...")
+        servidor.cerrar_socket()
 
 if __name__ == "__main__":
     main()

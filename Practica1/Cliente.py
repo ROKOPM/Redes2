@@ -4,7 +4,7 @@ import os
 class Client:
     def __init__(self):
         self.server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.server.connect(("192.168.1.82", 5555))
+        self.server.connect(("192.168.1.1", 65432))
         print("Connected to server!")
 
     def enviar(self, mensaje):
