@@ -2,7 +2,7 @@ import socket
 
 HOST = "192.168.100.9"  # Dirección del servidor
 PORT = 65432  # Puerto del servidor
-
+#AYUDA2.0
 class Client:
     def __init__(self):
         self.server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
