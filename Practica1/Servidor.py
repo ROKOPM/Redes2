@@ -1,6 +1,8 @@
+# server.py
 import socket
+import random
 
-HOST = "192.168.100.9"  # Dirección del servidor
+HOST = "192.168.36.167"  # Dirección del servidor
 PORT = 65432  # Puerto del servidor
 
 class Server:
@@ -48,9 +50,24 @@ class Matrix:
         self.mostrar()
 
     def cast(self, pos):
-        # Convertir las letras a índices de lista
         letters = 'ABC'
         return letters.index(pos[0].upper()) + (int(pos[1]) - 1) * 3
+
+    def ganador(self, jugador):
+        condiciones = [
+            [0, 1, 2], [3, 4, 5], [6, 7, 8],  # Filas
+            [0, 3, 6], [1, 4, 7], [2, 5, 8],  # Columnas
+            [0, 4, 8], [2, 4, 6]  # Diagonales
+        ]
+        return any(all(self.matriz[i] == jugador for i in cond) for cond in condiciones)
+
+    def movimientos_disponibles(self):
+        return [i for i, v in enumerate(self.matriz) if v == ' ']
+
+    def movimiento_random(self):
+        if self.movimientos_disponibles():
+            return random.choice(self.movimientos_disponibles())
+        return None
 
 def main():
     servidor = Server()
@@ -62,13 +79,24 @@ def main():
             print("Turno del jugador Cliente X.")
             charpos = servidor.recibir()
             matrix.agregar('X', charpos)
+            if matrix.ganador('X'):
+                print("Jugador X gana!")
+                servidor.enviar("GANASTE")
+                break
 
-            print("\tEs tu turno jugador O.")
-            charpos = input("Inserta la posición (Ej: A1, B2, C3): ")
-            matrix.agregar('O', charpos)
-            servidor.enviar(charpos)
+            print("Turno del servidor (O).")
+            move = matrix.movimiento_random()
+            if move is not None:
+                letters = 'ABC'
+                server_move = f"{letters[move % 3]}{(move // 3) + 1}"
+                matrix.agregar('O', server_move)
+                servidor.enviar(server_move)
+                if matrix.ganador('O'):
+                    print("Jugador O gana!")
+                    break
     except KeyboardInterrupt:
         print("\nCerrando el servidor...")
+    finally:
         servidor.cerrar_socket()
 
 if __name__ == "__main__":

@@ -1,12 +1,13 @@
+# client.py
 import socket
 
-HOST = "192.168.100.9"  # Dirección del servidor
+HOST = "192.168.36.167"  # Dirección del servidor
 PORT = 65432  # Puerto del servidor
-#AYUDA2.0
+
 class Client:
     def __init__(self):
         self.server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.server.connect((HOST, PORT))  # Usando el HOST y PORT especificados
+        self.server.connect((HOST, PORT))  # Conectar con el servidor
         print("Connected to server!")
 
     def enviar(self, mensaje):
@@ -40,7 +41,6 @@ class Matrix:
         self.mostrar()
 
     def cast(self, pos):
-        # Convertir las letras a índices de lista
         letters = 'ABC'
         return letters.index(pos[0].upper()) + (int(pos[1]) - 1) * 3
 
@@ -55,8 +55,11 @@ def main():
         matrix.agregar('X', charpos)
         cliente.enviar(charpos)
 
-        print("Turno del jugador Servidor.")
+        print("Turno del servidor (O).")
         charpos = cliente.recibir()
+        if charpos == "GANASTE":
+            print("¡Felicidades! Ganaste la partida.")
+            break
         matrix.agregar('O', charpos)
 
 if __name__ == "__main__":
