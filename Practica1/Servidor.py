@@ -1,105 +1,62 @@
 import socket
-import random
-from datetime import datetime
+import os
 
-class Servidor:
-    def __init__(self, host, port):
-        self.host = host
-        self.port = port
-        self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.juego_iniciado = False
-        self.tablero = []
-        self.m = 3  # Valores por defecto
-        self.n = 3
-        self.k = 3
-        self.simbolo_cliente = 'X'
-        self.simbolo_servidor = 'O'
-        self.inicio_partida = None
+class Server:
+    def __init__(self):
+        self.server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.server.bind(("", 5555))
+        self.server.listen(1)
+        print("Escuchando para conexiones entrantes.")
+        self.client, _ = self.server.accept()
+        print("Cliente conectado!")
 
-    def configurar_dificultad(self, dificultad):
-        if dificultad == "avanzado":
-            self.m, self.n, self.k = 5, 5, 5
-        else:  # principiante
-            self.m, self.n, self.k = 3, 3, 3
-        self.tablero = [[' ' for _ in range(self.n)] for _ in range(self.m)]
+    def recibir(self):
+        data = self.client.recv(1024).decode()
+        print(f"El cliente dice: {data}")
+        return data
 
-    def iniciar(self):
-        self.sock.bind((self.host, self.port))
-        self.sock.listen(1)
-        print(f"Servidor escuchando en {self.host}:{self.port}...")
-        
-        conn, addr = self.sock.accept()
-        print(f"Conexión establecida con {addr}")
-        self.inicio_partida = datetime.now()
-        
-        # Recibir dificultad
-        dificultad = conn.recv(1024).decode()
-        self.configurar_dificultad(dificultad)
-        conn.sendall(f"Partida iniciada - Dificultad: {dificultad}".encode())
-        
-        while True:
-            # Turno cliente
-            data = conn.recv(1024).decode()
-            if not data:
-                break
-            
-            x, y = map(int, data.split(','))
-            if self.tablero[x][y] == ' ':
-                self.tablero[x][y] = self.simbolo_cliente
-                estado = self.verificar_estado()
-                if estado != "continuar":
-                    self.finalizar_partida(conn, estado)
-                    break
-                
-                # Turno servidor
-                x_s, y_s = self.generar_jugada_servidor()
-                self.tablero[x_s][y_s] = self.simbolo_servidor
-                estado = self.verificar_estado()
-                conn.sendall(f"{x_s},{y_s},{estado}".encode())
-                
-                if estado != "continuar":
-                    self.finalizar_partida(conn, estado)
-                    break
-            else:
-                conn.sendall("Casilla ocupada".encode())
-        
-        conn.close()
-        self.sock.close()
+    def enviar(self, mensaje):
+        self.client.send(mensaje.encode())
+        print("Mensaje enviado!")
 
-    def generar_jugada_servidor(self):
-        casillas_vacias = [(i, j) for i in range(self.m) for j in range(self.n) if self.tablero[i][j] == ' ']
-        return random.choice(casillas_vacias)
+    def cerrar_socket(self):
+        self.client.close()
+        print("Socket cerrado, cliente desconectado.")
 
-    def verificar_estado(self):
-        # Horizontal y vertical
-        for i in range(self.m):
-            for j in range(self.n - self.k + 1):
-                if self.tablero[i][j] != ' ' and all(self.tablero[i][j + l] == self.tablero[i][j] for l in range(self.k)):
-                    return "ganaste" if self.tablero[i][j] == self.simbolo_cliente else "perdiste"
-                
-        for j in range(self.n):
-            for i in range(self.m - self.k + 1):
-                if self.tablero[i][j] != ' ' and all(self.tablero[i + l][j] == self.tablero[i][j] for l in range(self.k)):
-                    return "ganaste" if self.tablero[i][j] == self.simbolo_cliente else "perdiste"
+class Matrix:
+    def __init__(self):
+        self.matriz = [str(i+1) for i in range(9)]
 
-        # Empate
-        if all(cell != ' ' for row in self.tablero for cell in row):
-            return "empate"
-        
-        return "continuar"
+    def mostrar(self):
+        print("\n" * 2)
+        for i in range(0, 9, 3):
+            print("\t\t" + "  ".join(self.matriz[i:i+3]))
+            print("\n" * 3)
 
-    def finalizar_partida(self, conn, estado):
-        fin_partida = datetime.now()
-        duracion = fin_partida - self.inicio_partida
-        mensaje = f"{estado}-Tiempo: {duracion.total_seconds()} segundos"
-        conn.sendall(mensaje.encode())
-        print("Partida finalizada:", mensaje)
+    def agregar(self, elemento, pos):
+        self.matriz[pos-1] = elemento
+        os.system("cls" if os.name == "nt" else "clear")
+        self.mostrar()
+
+    def cast(self, pos):
+        return int(pos) - 48
+
+def main():
+    servidor = Server()
+    matrix = Matrix()
+    matrix.mostrar()
+
+    while True:
+        print("Turno del jugador Cliente X.")
+        charpos = servidor.recibir()[0]
+        pos = int(charpos)
+        matrix.agregar('X', pos)
+
+        print("\tEs tu turno jugador O.")
+        charpos = input("Inserta la posición: ")
+        pos = int(charpos)
+        matrix.agregar('O', pos)
+        servidor.enviar(charpos)
 
 if __name__ == "__main__":
-    host = input("Ingrese IP del servidor: ")
-    port = int(input("Ingrese puerto: "))
-    dificultad = input("Dificultad (principiante/avanzado): ").lower()
-    
-    servidor = Servidor(host, port)
-    servidor.configurar_dificultad(dificultad)
-    servidor.iniciar()
+    main()

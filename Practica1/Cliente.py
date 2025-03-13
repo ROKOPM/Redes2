@@ -1,59 +1,59 @@
 import socket
-from datetime import datetime
+import os
 
-class Cliente:
+class Client:
     def __init__(self):
-        self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.tablero = []
-        self.simbolo_servidor = 'O'
-    
-    def conectar(self, host, port, dificultad):
-        self.sock.connect((host, port))
-        self.sock.sendall(dificultad.encode())
-        
-        respuesta = self.sock.recv(1024).decode()
-        print(respuesta)
-        self.inicializar_tablero(dificultad)
-        self.mostrar_tablero()
-        
-        while True:
-            try:
-                x = int(input("Fila: "))
-                y = int(input("Columna: "))
-                self.sock.sendall(f"{x},{y}".encode())
-                
-                data = self.sock.recv(1024).decode()
-                if '-' in data:  # Mensaje final
-                    estado, tiempo = data.split('-')
-                    print(f"\nResultado: {estado} | {tiempo}")
-                    break
-                
-                if data == "Casilla ocupada":
-                    print("¡Casilla ocupada! Intenta otra")
-                    continue
-                
-                x_s, y_s, estado = data.split(',')
-                self.tablero[int(x_s)][int(y_s)] = self.simbolo_servidor
-                self.mostrar_tablero()
-                print(f"Estado: {estado}")
-                
-            except ValueError:
-                print("Entrada inválida. Usa números enteros")
+        self.server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.server.connect(("192.168.1.82", 5555))
+        print("Connected to server!")
 
-    def inicializar_tablero(self, dificultad):
-        size = 5 if dificultad == "avanzado" else 3
-        self.tablero = [[' ' for _ in range(size)] for _ in range(size)]
+    def enviar(self, mensaje):
+        self.server.send(mensaje.encode())
+        print("Mensaje enviado!")
 
-    def mostrar_tablero(self):
-        print("\nTablero:")
-        for row in self.tablero:
-            print('|'.join(row))
-            print('-' * (len(row)*2 - 1))
+    def recibir(self):
+        data = self.server.recv(1024).decode()
+        print(f"El Servidor dice: {data}")
+        return data
+
+    def cerrar(self):
+        self.server.close()
+        print("Socket cerrado.\n")
+
+class Matrix:
+    def __init__(self):
+        self.matriz = [str(i+1) for i in range(9)]
+
+    def mostrar(self):
+        print("\n" * 2)
+        for i in range(0, 9, 3):
+            print("\t\t" + "  ".join(self.matriz[i:i+3]))
+            print("\n" * 3)
+
+    def agregar(self, elemento, pos):
+        self.matriz[pos-1] = elemento
+        os.system("cls" if os.name == "nt" else "clear")
+        self.mostrar()
+
+    def cast(self, pos):
+        return int(pos) - 48
+
+def main():
+    cliente = Client()
+    matrix = Matrix()
+    matrix.mostrar()
+
+    while True:
+        print("\tEs tu turno.")
+        charpos = input("Inserta la posición: ")
+        pos = int(charpos)
+        matrix.agregar('X', pos)
+        cliente.enviar(charpos)
+
+        print("Turno del jugador Servidor.")
+        charpos = cliente.recibir()[0]
+        pos = int(charpos)
+        matrix.agregar('O', pos)
 
 if __name__ == "__main__":
-    host = input("IP del servidor: ")
-    port = int(input("Puerto: "))
-    dificultad = input("Dificultad (principiante/avanzado): ").lower()
-    
-    cliente = Cliente()
-    cliente.conectar(host, port, dificultad)
+    main()
