@@ -1,7 +1,6 @@
-# client.py
 import socket
 
-HOST = "192.168.36.167"  # Dirección del servidor
+HOST = "192.168.100.9"  # Dirección del servidor
 PORT = 65432  # Puerto del servidor
 
 class Client:
@@ -44,6 +43,10 @@ class Matrix:
         letters = 'ABC'
         return letters.index(pos[0].upper()) + (int(pos[1]) - 1) * 3
 
+    def es_movimiento_valido(self, pos):
+        pos_index = self.cast(pos)
+        return self.matriz[pos_index] == ' '
+
 def main():
     cliente = Client()
     matrix = Matrix()
@@ -51,7 +54,16 @@ def main():
 
     while True:
         print("\tEs tu turno.")
-        charpos = input("Inserta la posición (Ej: A1, B2, C3): ")
+        while True:
+            charpos = input("Inserta la posición (Ej: A1, B2, C3): ").upper()
+            if len(charpos) == 2 and charpos[0] in "ABC" and charpos[1] in "123":
+                if matrix.es_movimiento_valido(charpos):
+                    break
+                else:
+                    print("Esa posición ya está ocupada, elige otra.")
+            else:
+                print("Formato incorrecto. Usa A1, B2, C3, etc.")
+
         matrix.agregar('X', charpos)
         cliente.enviar(charpos)
 

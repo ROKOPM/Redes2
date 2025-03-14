@@ -1,8 +1,7 @@
-# server.py
 import socket
 import random
 
-HOST = "192.168.36.167"  # Dirección del servidor
+HOST = "192.168.100.9"  # Dirección del servidor
 PORT = 65432  # Puerto del servidor
 
 class Server:
