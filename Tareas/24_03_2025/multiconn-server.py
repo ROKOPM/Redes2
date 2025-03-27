@@ -31,7 +31,7 @@ def read_write(conn, mask):
         conn.sendall(data.outb)
 
 with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
-    sock.bind(('localhost', 12345))
+    sock.bind(('192.168.135.167', 12345))
     sock.listen(100)
     sock.setblocking(False)
     sel.register(sock, selectors.EVENT_READ, accept)
