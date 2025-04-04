@@ -6,14 +6,17 @@ sel = selectors.DefaultSelector()
 clientes = {}
 
 def aceptar(sock, mask):
-    conn, addr = sock.accept()
+    conn, addr = sock.accept()  # Acepta la conexión
     print(f'[+] Conexión aceptada desde {addr}')
     conn.setblocking(False)
     data = types.SimpleNamespace(addr=addr, messages=[], outb=b"")
     clientes[conn] = data
+    # Registrar la conexión del cliente en el selector
     sel.register(conn, selectors.EVENT_READ | selectors.EVENT_WRITE, data)
+    print(f'[+] Conexión registrada para {addr}')
 
 def actualizar(remitente, mensaje):
+    # Enviar el mensaje a todos los clientes, menos al remitente
     for conn, data in clientes.items():
         if conn != remitente:
             data.messages.append(mensaje)
@@ -23,7 +26,9 @@ def manejar_cliente(conn, mask):
         print("[!] Conexión no registrada, ignorando...")
         return  # Seguridad adicional para evitar KeyError
 
-    data = clientes[conn]
+    data = clientes.get(conn)  # Usar .get() para evitar KeyError
+    if not data:
+        return  # Si el socket ya fue eliminado, salir
 
     if mask & selectors.EVENT_READ:
         try:
@@ -31,14 +36,18 @@ def manejar_cliente(conn, mask):
             if recv_data:
                 mensaje = recv_data.decode()
                 print(f'[Mensaje de {data.addr}]: {mensaje}')
+                # Enviar el mensaje recibido a todos los demás clientes
                 actualizar(conn, f"[{data.addr}]: {mensaje}".encode())
             else:
                 cerrar_conexion(conn)
         except (ConnectionResetError, ConnectionAbortedError):
             print(f'[!] Conexión perdida con {data.addr}')
             cerrar_conexion(conn)
+        except Exception as e:
+            print(f'[!] Error inesperado con {data.addr}: {e}')
+            cerrar_conexion(conn)
 
-    if mask & selectors.EVENT_WRITE:
+    if mask & selectors.EVENT_WRITE and data in clientes.values():
         if data.messages:
             mensaje = data.messages.pop(0)
             try:
@@ -49,11 +58,12 @@ def manejar_cliente(conn, mask):
 
 def cerrar_conexion(conn):
     try:
-        addr = clientes[conn].addr
-        print(f'[-] Cerrando conexión {addr}')
-        sel.unregister(conn)
-        conn.close()
-        del clientes[conn]
+        if conn in clientes:
+            addr = clientes[conn].addr
+            print(f'[-] Cerrando conexión {addr}')
+            sel.unregister(conn)
+            del clientes[conn]  # Eliminar antes de cerrar
+            conn.close()
     except Exception as e:
         print(f'[!] Error al cerrar conexión: {e}')
 
@@ -65,8 +75,8 @@ if __name__ == "__main__":
         sock.bind((HOST, PORT))
         sock.listen(100)
         sock.setblocking(False)
+        # Registrar el socket de escucha para aceptar nuevas conexiones
         sel.register(sock, selectors.EVENT_READ, aceptar)
-
         print(f"✅ Servidor escuchando en {HOST}:{PORT}...")
 
         try:

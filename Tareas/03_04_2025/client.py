@@ -9,12 +9,15 @@ def recibir(sock):
     while True:
         try:
             data = sock.recv(1024)
-            if data:
-                print(f"\n[Mensaje recibido]: {data.decode()}")
-            else:
-                print("Conexión cerrada por el servidor.")
+            if not data:
+                print("\n[!] Conexión cerrada por el servidor.")
                 break
-        except:
+            print(f"\n[Mensaje recibido]: {data.decode()}")
+        except ConnectionResetError:
+            print("\n[!] Conexión cerrada inesperadamente.")
+            break
+        except Exception as e:
+            print(f"\n[!] Error recibiendo datos: {e}")
             break
 
 def main():
@@ -26,7 +29,12 @@ def main():
     port = int(sys.argv[2])
 
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    sock.connect((host, port))
+    
+    try:
+        sock.connect((host, port))
+    except Exception as e:
+        print(f"[!] No se pudo conectar al servidor: {e}")
+        sys.exit(1)
 
     # Hilo para escuchar mensajes del servidor
     threading.Thread(target=recibir, args=(sock,), daemon=True).start()
@@ -36,7 +44,11 @@ def main():
         while True:
             msg = input("> ")
             if msg:
-                sock.sendall(msg.encode())
+                try:
+                    sock.sendall(msg.encode())
+                except BrokenPipeError:
+                    print("[!] No se pudo enviar el mensaje, conexión cerrada.")
+                    break
     except KeyboardInterrupt:
         print("\nCerrando cliente...")
     finally:
