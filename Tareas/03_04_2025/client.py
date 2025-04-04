@@ -13,7 +13,7 @@ def recibir_mensajes(sock):
 
 def cliente():
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    sock.connect(("192.168.100.9", 5555))  # ← IP actualizada aquí
+    sock.connect(("192.168.100.9", 5555))  
 
     thread = threading.Thread(target=recibir_mensajes, args=(sock,))
     thread.daemon = True

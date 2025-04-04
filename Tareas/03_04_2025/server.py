@@ -31,7 +31,7 @@ def handle_client(conn, addr):
 
 def start_server():
     server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    server.bind(("192.168.100.9", 5555))  # ← IP actualizada aquí
+    server.bind(("192.168.100.9", 5555))  
     server.listen()
 
     print("[ESCUCHANDO] Servidor en espera de conexiones...")
