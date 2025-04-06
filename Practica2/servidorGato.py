@@ -3,44 +3,52 @@ import socket
 import types
 import random
 
-HOST = "192.168.100.9"
+HOST = "192.168.1.13"
 PORT = 65432
 sel = selectors.DefaultSelector()
 
-# Mapeo para coordenadas tipo "A1", "B2"... 
 LETRAS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
 
 class Matrix:
+#Definimos la config de la matriz
     def __init__(self, filas, columnas, objetivo):
         self.filas = filas
         self.columnas = columnas
-        self.objetivo = objetivo  # 3 para gato, 4 para conecta 4
+        self.objetivo = objetivo
         self.matriz = [[" " for _ in range(columnas)] for _ in range(filas)]
 
+#Esto muestra la matriz
     def mostrar(self):
         header = "   " + "   ".join(LETRAS[:self.columnas])
-        print("\n" + header)
+        lines = [header]
         for idx, fila in enumerate(self.matriz):
-            print(f"{idx+1}  " + " | ".join(fila))
+            line = f"{idx+1}  " + " | ".join(fila)
+            lines.append(line)
             if idx < self.filas - 1:
-                print("   " + "---+" * (self.columnas - 1) + "---")
-
+                separator = "   " + "---+" * (self.columnas - 1) + "---"
+                lines.append(separator)
+        return "\n".join(lines)
+#Este es el metodo que Agrega los simobolos de la matriz ya dibujada
     def agregar(self, simbolo, pos):
-        col = LETRAS.index(pos[0])
-        fila = int(pos[1:]) - 1
+        try:
+            col = LETRAS.index(pos[0].upper())
+            fila = int(pos[1:]) - 1
+        except (ValueError, IndexError):
+            return False
+        if fila < 0 or fila >= self.filas or col < 0 or col >= self.columnas:
+            return False
         if self.matriz[fila][col] == " ":
             self.matriz[fila][col] = simbolo
             return True
         return False
 
     def ganador(self, simbolo):
-        # Recorremos toda la matriz para buscar secuencias del mismo simbolo
         for f in range(self.filas):
             for c in range(self.columnas):
-                if self.check_direccion(f, c, 1, 0, simbolo): return True  # Horizontal
-                if self.check_direccion(f, c, 0, 1, simbolo): return True  # Vertical
-                if self.check_direccion(f, c, 1, 1, simbolo): return True  # Diagonal principal
-                if self.check_direccion(f, c, 1, -1, simbolo): return True # Diagonal inversa
+                if self.check_direccion(f, c, 1, 0, simbolo): return True
+                if self.check_direccion(f, c, 0, 1, simbolo): return True
+                if self.check_direccion(f, c, 1, 1, simbolo): return True
+                if self.check_direccion(f, c, 1, -1, simbolo): return True
         return False
 
     def check_direccion(self, f, c, df, dc, simbolo):
@@ -59,15 +67,11 @@ class Matrix:
                 if self.matriz[f][c] == " ":
                     posiciones.append(f"{LETRAS[c]}{f+1}")
         return posiciones
-
-# ---------------------------
-
+#Deinir clientes 
 clients = []
 current_turn = 0
 matrix = None
 symbols = ["X", "O"]
-
-# ---------------------------
 
 def aceptar_conexion(sock):
     conn, addr = sock.accept()
@@ -76,21 +80,20 @@ def aceptar_conexion(sock):
     data = types.SimpleNamespace(addr=addr, inb=b"", outb=b"")
     sel.register(conn, selectors.EVENT_READ, data=data)
     clients.append(conn)
-
+ #Aqui tenemos que el primer jugador en conectarse es el que elige dificultad
     if len(clients) == 1:
         conn.send("Eres el Jugador 1. Elige dificultad:\n1. Fácil (3x3)\n2. Medio (4x4)\n3. Difícil (4x6)\n".encode())
+#Para 2 jugadores
     elif len(clients) == 2:
         clients[1].send("Eres el Jugador 2. Esperando jugadas...\n".encode())
         clients[0].send("Comienza el juego. Es tu turno.\n".encode())
         mostrar_tablero_a_todos()
 
-# ---------------------------
-
+#Procesamos los turnos con un indice
 def procesar_jugada(conn, mensaje):
     global current_turn, matrix
     jugador_idx = clients.index(conn)
     
-    # Comprobar si es el turno del jugador
     if jugador_idx != current_turn:
         conn.send("No es tu turno.\n".encode())
         return
@@ -108,38 +111,29 @@ def procesar_jugada(conn, mensaje):
 
     mostrar_tablero_a_todos()
 
-    # Cambiar turno
     current_turn = (current_turn + 1) % 2
-    # Notificar al jugador siguiente
     clients[current_turn].send("Es tu turno.\n".encode())
 
-# ---------------------------
-
 def mostrar_tablero_a_todos():
-    import io
-    import sys
-    buffer = io.StringIO()
-    sys.stdout = buffer
-    matrix.mostrar()
-    sys.stdout = sys.__stdout__
-    output = buffer.getvalue()
-    enviar_a_todos(output)
-
-# ---------------------------
+    if matrix is not None:
+        tablero_str = matrix.mostrar()
+        enviar_a_todos(tablero_str + "\n")
 
 def enviar_a_todos(mensaje):
-    for c in clients:
-        c.send(mensaje.encode())
-
-# ---------------------------
+    for c in clients[:]:
+        try:
+            c.send(mensaje.encode())
+        except Exception as e:
+            print(f"Error al enviar a un cliente: {e}")
+            if c in clients:
+                clients.remove(c)
+            c.close()
 
 def cerrar_servidor():
     for c in clients:
         c.close()
     sel.close()
     exit()
-
-# ---------------------------
 
 lsock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 lsock.bind((HOST, PORT))
@@ -175,9 +169,13 @@ while True:
                         procesar_jugada(sock, mensaje)
                 else:
                     print("Cliente desconectado")
+                    if sock in clients:
+                        clients.remove(sock)
                     sel.unregister(sock)
                     sock.close()
             except Exception as e:
                 print(f"Error: {e}")
+                if sock in clients:
+                    clients.remove(sock)
                 sel.unregister(sock)
                 sock.close()

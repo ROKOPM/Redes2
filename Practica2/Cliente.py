@@ -7,29 +7,14 @@ class Client:
     def __init__(self):
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.sock.connect((HOST, PORT))
-        
-        # Selección de dificultad
-        while True:
-            dificultad = input("Dificultad [Fácil(F)/Avanzado(A)]: ").upper()
-            if dificultad in ('F', 'A'):
-                break
-        self.sock.send(dificultad.encode())
-        
-        # Verificar respuesta del servidor
-        respuesta = self.sock.recv(1024).decode()
-        if respuesta.startswith("ERROR"):
-            print(respuesta.split(":")[1])
-            exit()
+        print("Conectado al servidor. Esperando jugadores...")
 
-    # Envía un mensaje al servidor
     def enviar(self, mensaje):
         self.sock.send(mensaje.encode())
 
-    # Recibe un mensaje del servidor
     def recibir(self):
         return self.sock.recv(1024).decode()
 
-    # Cierra la conexión
     def cerrar(self):
         self.sock.close()
 
@@ -38,45 +23,92 @@ class Matrix:
         self.size = size
         self.matriz = [' ' for _ in range(size * size)]
 
-    # Muestra el tablero
     def mostrar(self):
+        print("\n" + "="*30)
         letras = 'ABCDE'[:self.size]
-        print("\nTablero:")
-        print("\t   " + "   ".join(letras))
+        print("\t\t  " + "   ".join(letras))
         for i in range(0, len(self.matriz), self.size):
             fila = self.matriz[i:i+self.size]
-            print(f"\t{i//self.size + 1}  " + " | ".join(fila))
+            print(f"\t\t{(i//self.size)+1} " + " | ".join(fila))
             if i + self.size < len(self.matriz):
-                print("\t  " + "-"*(self.size*4 - 1))
+                print("\t\t  " + "-"*(self.size*3-1))
+
+    def agregar(self, elemento, pos):
+        try:
+            pos_index = self.cast(pos)
+            if self.matriz[pos_index] == ' ':
+                self.matriz[pos_index] = elemento
+            self.mostrar()
+        except ValueError as e:
+            print(f"Error: {e}")
+
+    def cast(self, pos):
+        if len(pos) != 2:
+            raise ValueError("Formato debe ser LetraNúmero (Ej: A1)")
+        letra = pos[0].upper()
+        num = pos[1]
+        letras_validas = 'ABCDE'[:self.size]
+        if letra not in letras_validas or not num.isdigit():
+            raise ValueError("Posición inválida")
+        fila = int(num) - 1
+        col = letras_validas.index(letra)
+        if fila < 0 or fila >= self.size:
+            raise ValueError("Fila inválida")
+        return fila * self.size + col
+
+    def es_movimiento_valido(self, pos):
+        try:
+            pos_index = self.cast(pos)
+            return self.matriz[pos_index] == ' '
+        except ValueError:
+            return False
 
 def main():
     cliente = Client()
-    matrix = None
-
+    
+    # Selección y validación de dificultad
+    difficulty = ''
+    while difficulty not in ('F', 'A'):
+        difficulty = input("Selecciona dificultad [Fácil/Avanzado] (F/A): ").upper()
+        if difficulty not in ('F', 'A'):
+            print("Opción inválida. Intenta nuevamente.")
+    
+    cliente.enviar(difficulty)
+    size = 3 if difficulty == 'F' else 5
+    
     try:
+        inicio = cliente.recibir()
+        if inicio != "INICIO":
+            raise ConnectionError("Error de sincronización con el servidor")
+        
+        matrix = Matrix(size)
+        matrix.mostrar()
+
         while True:
-            mensaje = cliente.recibir()
-            if mensaje == "INICIO":
-                print("¡Partida iniciada!")
-            elif mensaje.startswith("ACTUALIZACION:"):
-                matriz_str = mensaje.split(":")[1].split(",")
-                if not matrix:
-                    size = int(len(matriz_str)**0.5)
-                    matrix = Matrix(size)
-                matrix.matriz = matriz_str
-                matrix.mostrar()
-            elif mensaje == "TURNO":
-                movimiento = input("Tu turno (ej: A1): ").upper()
-                cliente.enviar(movimiento)
-            elif mensaje.startswith("GANADOR:"):
-                print(f"¡GANADOR: {mensaje.split(':')[1]}!")
+            print("\n<<< TU TURNO >>>")
+            valid_letras = 'ABCDE'[:size]
+            valid_nums = [str(i+1) for i in range(size)]
+            
+            # Validación de entrada
+            while True:
+                movimiento = input(f"Ingresa posición ({valid_letras[0]}1-{valid_letras[-1]}{size}): ").upper()
+                if matrix.es_movimiento_valido(movimiento):
+                    break
+                print("Movimiento inválido o posición ocupada!")
+            
+            matrix.agregar('X', movimiento)
+            cliente.enviar(movimiento)
+
+            respuesta = cliente.recibir()
+            if respuesta in ("GANASTE", "EMPATE", "PERDISTE"):
+                print(f"\n*** {respuesta} ***")
                 break
-            elif mensaje == "EMPATE":
-                print("¡Empate!")
-                break
-            elif mensaje == "JUGADOR_DESCONECTADO":
-                print("¡Un jugador se desconectó!")
-                break
+                
+            matrix.agregar('O', respuesta)
+            print("\n<<< MOVIMIENTO DEL SERVIDOR >>>")
+
+    except (ConnectionError, ConnectionAbortedError) as e:
+        print(f"\nError de conexión: {e}")
     finally:
         cliente.cerrar()
 
