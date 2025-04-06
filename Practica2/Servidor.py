@@ -11,100 +11,111 @@ class Server:
         self.server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         self.server.bind((HOST, PORT))
         self.server.listen(5)
-        self.clients = []
-        self.barrier = threading.Barrier(5)
-        print("Esperando 5 conexiones...")
+        self.partidas = {}  # {dificultad: {'clientes': [], 'matrix': Matrix, 'max_jugadores': int}}
+        print("Servidor listo. Esperando conexiones...")
 
-#Esperar conexiones
-    def handle_client(self, client):
-        try:
-            self.clients.append(client)
-            print(f"Conexión ({len(self.clients)}/5)")
-            self.barrier.wait()
-#Recibir dificultad y guardar para modificar matriz con size
-            difficulty = client.recv(1024).decode().strip().upper()
-            size = 3 if difficulty == 'F' else 5
-            matrix = Matrix(size)
-            client.send("INICIO".encode())
-            
-            print(f"Juego {len(self.clients)} iniciado ({size}x{size})")
-            
-#Envio de actualizacion al cliente de movimientos del servidor y su copia correspondiente
-#Cada entidad mantiene su copia solo se envian los movimientos echos por cada uno 
-            while True:
-                jugada = client.recv(1024).decode()
-                if not jugada or jugada == "SALIR":
-                    break
-                
+    # Envía un mensaje a todos los clientes de una partida
+    def broadcast(self, mensaje, dificultad):
+        if dificultad in self.partidas:
+            for cliente in self.partidas[dificultad]['clientes']:
                 try:
-                    matrix.agregar('X', jugada)
-                except ValueError:
-                    client.send("INVALIDO".encode())
+                    cliente.send(mensaje.encode())
+                except:
+                    self.manejar_desconexion(cliente, dificultad)
+
+    # Elimina un cliente desconectado y notifica
+    def manejar_desconexion(self, cliente, dificultad):
+        if dificultad in self.partidas:
+            self.partidas[dificultad]['clientes'].remove(cliente)
+            self.broadcast(f"JUGADOR_DESCONECTADO", dificultad)
+            cliente.close()
+
+    # Valida si hay cupo en la partida según la dificultad
+    def validar_partida(self, dificultad):
+        max_jugadores = 2 if dificultad == 'F' else 5
+        if dificultad not in self.partidas:
+            self.partidas[dificultad] = {
+                'clientes': [],
+                'matrix': Matrix(3 if dificultad == 'F' else 5),
+                'max_jugadores': max_jugadores
+            }
+        return len(self.partidas[dificultad]['clientes']) < max_jugadores
+
+    # Hilo para manejar cada cliente
+    def handle_client(self, cliente):
+        try:
+            dificultad = cliente.recv(1024).decode().strip().upper()
+            if not self.validar_partida(dificultad):
+                cliente.send("ERROR:Partida llena".encode())
+                cliente.close()
+                return
+
+            # Agregar cliente a la partida
+            partida = self.partidas[dificultad]
+            partida['clientes'].append(cliente)
+            self.broadcast(f"JUGADOR_CONECTADO:{len(partida['clientes']}", dificultad)
+
+            # Iniciar partida cuando esté completa
+            if len(partida['clientes']) == partida['max_jugadores']:
+                self.broadcast("INICIO", dificultad)
+                self.iniciar_juego(dificultad)
+
+        except Exception as e:
+            print(f"Error: {e}")
+
+    # Lógica principal del juego
+    def iniciar_juego(self, dificultad):
+        partida = self.partidas[dificultad]
+        matrix = partida['matrix']
+        jugadores = partida['clientes']
+        turno = 0  # Índice del jugador actual
+
+        while True:
+            jugador_actual = jugadores[turno % len(jugadores)]
+            try:
+                jugador_actual.send("TURNO".encode())
+                movimiento = jugador_actual.recv(1024).decode()
+
+                # Validar movimiento
+                if not matrix.es_movimiento_valido(movimiento):
+                    jugador_actual.send("ERROR:Movimiento inválido".encode())
                     continue
-                
-                if matrix.ganador('X'):
-                    client.send("GANASTE".encode())
+
+                # Actualizar tablero y notificar
+                simbolo = 'X' if turno % 2 == 0 else 'O'
+                matrix.agregar(simbolo, movimiento)
+                self.broadcast(f"ACTUALIZACION:{','.join(matrix.matriz)}", dificultad)
+
+                # Verificar victoria/empate
+                if matrix.ganador(simbolo):
+                    self.broadcast(f"GANADOR:{simbolo}", dificultad)
                     break
-                    
-                if matrix.empate():
-                    client.send("EMPATE".encode())
-                    break
-                
-                # Turno del servidor
-                disponibles = matrix.movimientos_disponibles()
-                if not disponibles:
-                    client.send("EMPATE".encode())
-                    break
-#El random
-                move = random.choice(disponibles)
-                letras = 'ABCDE'[:size]
-                server_move = f"{letras[move % size]}{(move // size) + 1}"
-                matrix.agregar('O', server_move)
-                client.send(server_move.encode())
-                
-                if matrix.ganador('O'):
-                    client.send("PERDISTE".encode())
+                elif matrix.empate():
+                    self.broadcast("EMPATE", dificultad)
                     break
 
-        except (ConnectionResetError, BrokenPipeError):
-            print("Cliente desconectado")
-        finally:
-            client.close()
-            
-#Inicializar hilos para cada cliente
+                turno += 1
+
+            except:
+                self.broadcast("DESCONEXION", dificultad)
+                break
+
+        # Cerrar partida
+        del self.partidas[dificultad]
+        for c in jugadores:
+            c.close()
 
     def start(self):
-        for _ in range(5):
-            client, addr = self.server.accept()
-            threading.Thread(target=self.handle_client, args=(client,)).start()
-
-    def cerrar_socket(self):
-        for client in self.clients:
-            client.close()
-        self.server.close()
-        print("Todos los sockets cerrados.")
+        while True:
+            cliente, addr = self.server.accept()
+            threading.Thread(target=self.handle_client, args=(cliente,)).start()
 
 class Matrix:
     def __init__(self, size):
         self.size = size
         self.matriz = [' ' for _ in range(size * size)]
-#Ahora si ya se muestran las coordenadas y e base a size se construye la matriz
-    def mostrar(self):
-        print("\n" + "="*30)
-        letras = 'ABCDE'[:self.size]
-        print("\t\t  " + "   ".join(letras))
-        for i in range(0, len(self.matriz), self.size):
-            fila = self.matriz[i:i+self.size]
-            print(f"\t\t{(i//self.size)+1} " + " | ".join(fila))
-            if i + self.size < len(self.matriz):
-                print("\t\t  " + "-"*(self.size*3-1))
 
-    def agregar(self, elemento, pos):
-        pos_index = self.cast(pos)
-        if self.matriz[pos_index] == ' ':
-            self.matriz[pos_index] = elemento
-            
-#Validaciones para errores
+    # Convierte posición (ej: A1) a índice
     def cast(self, pos):
         if len(pos) != 2:
             raise ValueError("Formato inválido")
@@ -114,38 +125,40 @@ class Matrix:
         if letra not in letras_validas or not num.isdigit():
             raise ValueError("Posición inválida")
         fila = int(num) - 1
-        if fila < 0 or fila >= self.size:
-            raise ValueError("Fila inválida")
-        return fila * self.size + letras_validas.index(letra)
-    
-#Codiciones de victoria(en base a la matriz y el tamaño 
+        columna = letras_validas.index(letra)
+        return fila * self.size + columna
 
-    def ganador(self, jugador):
-        # Horizontal y vertical
+    # Añade un símbolo al tablero
+    def agregar(self, simbolo, pos):
+        idx = self.cast(pos)
+        if self.matriz[idx] == ' ':
+            self.matriz[idx] = simbolo
+
+    # Verifica si el movimiento es válido
+    def es_movimiento_valido(self, pos):
+        try:
+            idx = self.cast(pos)
+            return self.matriz[idx] == ' '
+        except:
+            return False
+
+    # Comprueba si hay un ganador
+    def ganador(self, simbolo):
+        # Filas y columnas
         for i in range(self.size):
-            if all(self.matriz[i*self.size + j] == jugador for j in range(self.size)):
+            if all(self.matriz[i*self.size + j] == simbolo for j in range(self.size)):
                 return True
-            if all(self.matriz[j*self.size + i] == jugador for j in range(self.size)):
+            if all(self.matriz[j*self.size + i] == simbolo for j in range(self.size)):
                 return True
-        
         # Diagonales
-        diag1 = all(self.matriz[i*self.size + i] == jugador for i in range(self.size))
-        diag2 = all(self.matriz[i*self.size + (self.size-1-i)] == jugador for i in range(self.size))
+        diag1 = all(self.matriz[i*self.size + i] == simbolo for i in range(self.size))
+        diag2 = all(self.matriz[i*self.size + (self.size-1-i)] == simbolo for i in range(self.size))
         return diag1 or diag2
 
+    # Verifica empate
     def empate(self):
         return ' ' not in self.matriz
 
-    def movimientos_disponibles(self):
-        return [i for i, v in enumerate(self.matriz) if v == ' ']
-
-#llamadas
 if __name__ == "__main__":
-    try:
-        servidor = Server()
-        servidor.start()
-        input("Presiona Enter para detener el servidor...\n")
-    except KeyboardInterrupt:
-        print("\nServidor detenido manualmente")
-    finally:
-        servidor.cerrar_socket()
+    servidor = Server()
+    servidor.start()
