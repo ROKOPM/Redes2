@@ -1,111 +1,119 @@
 import socket
 
-HOST = "192.168.1.13"  # Dirección del servidor
-PORT = 65431  # Puerto del servidor
-
+HOST = "192.168.1.13"
+PORT = 65431
+#La config de cliente
 class Client:
     def __init__(self):
-        self.server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.server.connect((HOST, PORT))
-        print("Connected to server!")
+        self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.sock.connect((HOST, PORT))
+        print("Conectado al servidor. Esperando jugadores...")
 
     def enviar(self, mensaje):
-        self.server.send(mensaje.encode())
+        self.sock.send(mensaje.encode())
 
     def recibir(self):
-        return self.server.recv(1024).decode()
+        return self.sock.recv(1024).decode()
 
     def cerrar(self):
-        self.server.close()
-
+        self.sock.close()
+        
+#Dibuja la matriz necesaria segun la dificultad en base al size enviado
 class Matrix:
     def __init__(self, size):
         self.size = size
         self.matriz = [' ' for _ in range(size * size)]
 
     def mostrar(self):
-        print("\n" * 2)
-        # Encabezado de columnas
+        print("\n" + "="*30)
         letras = 'ABCDE'[:self.size]
-        encabezado = "\t\t  " + "   ".join(letras)
-        print(encabezado)
-    
-        # Filas del tablero
+        print("\t\t  " + "   ".join(letras))
         for i in range(0, len(self.matriz), self.size):
-            fila_num = (i // self.size) + 1
-            row = self.matriz[i:i+self.size]
-            print(f"\t\t{fila_num} " + " | ".join(row))
+            fila = self.matriz[i:i+self.size]
+            print(f"\t\t{(i//self.size)+1} " + " | ".join(fila))
             if i + self.size < len(self.matriz):
-                separador = "\t\t  " + "-" * (self.size * 3 - 1)
-                print(separador)
+                print("\t\t  " + "-"*(self.size*3-1))
 
+#Dibuja las posicones
     def agregar(self, elemento, pos):
-        pos_index = self.cast(pos)
-        if self.matriz[pos_index] == ' ':
-            self.matriz[pos_index] = elemento
-        self.mostrar()
+        try:
+            pos_index = self.cast(pos)
+            if self.matriz[pos_index] == ' ':
+                self.matriz[pos_index] = elemento
+            self.mostrar()
+        except ValueError as e:
+            print(f"Error: {e}")
 
+#Manejo de errores en caso de que introduzcas un valor no valido
     def cast(self, pos):
-        letters = 'ABCDE'[:self.size]
-        col = letters.index(pos[0].upper())
-        row = int(pos[1]) - 1
-        return row * self.size + col
+        if len(pos) != 2:
+            raise ValueError("Formato debe ser LetraNúmero (Ej: A1)")
+        letra = pos[0].upper()
+        num = pos[1]
+        letras_validas = 'ABCDE'[:self.size]
+        if letra not in letras_validas or not num.isdigit():
+            raise ValueError("Posición inválida")
+        fila = int(num) - 1
+        col = letras_validas.index(letra)
+        if fila < 0 or fila >= self.size:
+            raise ValueError("Fila inválida")
+        return fila * self.size + col
 
     def es_movimiento_valido(self, pos):
         try:
             pos_index = self.cast(pos)
             return self.matriz[pos_index] == ' '
-        except:
+        except ValueError:
             return False
 
 def main():
     cliente = Client()
     
-    # Selección de dificultad
-    difficulty = input("Selecciona dificultad (Fácil/Avanzado) [F/A]: ").upper()
+    # Selección y validación de dificultad
+    difficulty = ''
     while difficulty not in ('F', 'A'):
-        print("Opción inválida. Usa F para Fácil o A para Avanzado.")
-        difficulty = input("Selecciona dificultad [F/A]: ").upper()
-    cliente.enviar(difficulty)
+        difficulty = input("Selecciona dificultad [Fácil/Avanzado] (F/A): ").upper()
+        if difficulty not in ('F', 'A'):
+            print("Opción inválida. Intenta nuevamente.")
     
+    cliente.enviar(difficulty)
     size = 3 if difficulty == 'F' else 5
-    matrix = Matrix(size)
-    matrix.mostrar()
-
-    while True:
-        print("\tEs tu turno.")
-        valid_letters = 'ABCDE'[:size]
-        valid_numbers = [str(i+1) for i in range(size)]
+    
+    try:
+        inicio = cliente.recibir()
+        if inicio != "INICIO":
+            raise ConnectionError("Error de sincronización con el servidor")
         
+        matrix = Matrix(size)
+        matrix.mostrar()
+
         while True:
-            charpos = input(f"Ingresa posición (Ej: {valid_letters[0]}{valid_numbers[0]}): ").upper()
-            if len(charpos) == 2 and charpos[0] in valid_letters and charpos[1] in valid_numbers:
-                if matrix.es_movimiento_valido(charpos):
-                    break
-                else:
-                    print("Posición ocupada. Intenta otra.")
-            else:
-                print(f"Formato incorrecto. Usa {valid_letters} y {valid_numbers}.")
-        
-        matrix.agregar('X', charpos)
-        cliente.enviar(charpos)
-
-        respuesta = cliente.recibir()
-        if respuesta == "GANASTE":
-            print("¡Ganaste!")
-            break
-        elif respuesta == "EMPATE":
-            print("¡Empate!")
-            break
+            print("\n<<< TU TURNO >>>")
+            valid_letras = 'ABCDE'[:size]
+            valid_nums = [str(i+1) for i in range(size)]
             
-        matrix.agregar('O', respuesta)
-        
-        # Verificar si el servidor ganó
-        if all(cell != ' ' for cell in matrix.matriz):
-            print("¡Empate!")
-            break
+            # Validación de entrada
+            while True:
+                movimiento = input(f"Ingresa posición ({valid_letras[0]}1-{valid_letras[-1]}{size}): ").upper()
+                if matrix.es_movimiento_valido(movimiento):
+                    break
+                print("Movimiento inválido o posición ocupada!")
+            
+            matrix.agregar('X', movimiento)
+            cliente.enviar(movimiento)
 
-    cliente.cerrar()
+            respuesta = cliente.recibir()
+            if respuesta in ("GANASTE", "EMPATE", "PERDISTE"):
+                print(f"\n*** {respuesta} ***")
+                break
+                
+            matrix.agregar('O', respuesta)
+            print("\n<<< MOVIMIENTO DEL SERVIDOR >>>")
+
+    except (ConnectionError, ConnectionAbortedError) as e:
+        print(f"\nError de conexión: {e}")
+    finally:
+        cliente.cerrar()
 
 if __name__ == "__main__":
     main()
