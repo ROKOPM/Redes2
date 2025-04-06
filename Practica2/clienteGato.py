@@ -1,7 +1,7 @@
 import socket
 import threading
 
-HOST = "192.168.1.13"
+HOST = "192.168.100.9"
 PORT = 65432
 
 class Cliente:
@@ -45,9 +45,28 @@ def main():
 
     try:
         while cliente.running:
-            # Leer entrada del usuario y enviar al servidor
+            # Esperar que el servidor pida la selección de dificultad
             mensaje = input(">>> ").strip().upper()
-            cliente.enviar_mensaje(mensaje)
+
+            if "elige dificultad" in mensaje:
+                # Mostrar el mensaje para elegir dificultad
+                print("Elige la dificultad:")
+                print("1. Fácil (3x3)")
+                print("2. Medio (4x4)")
+                print("3. Difícil (4x6)")
+
+                # Solicitar la elección de dificultad
+                while True:
+                    seleccion = input(">>> ").strip()
+                    if seleccion == "1" or seleccion == "2" or seleccion == "3":
+                        cliente.enviar_mensaje(seleccion)
+                        print(f"Dificultad {seleccion} seleccionada correctamente.")
+                        break
+                    else:
+                        print("Selección inválida, por favor elige 1, 2 o 3.")
+            else:
+                # Enviar el mensaje al servidor (para movimientos)
+                cliente.enviar_mensaje(mensaje)
 
     except KeyboardInterrupt:
         print("Desconectando cliente...")
