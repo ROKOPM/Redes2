@@ -7,6 +7,7 @@ class Client:
     def __init__(self):
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.sock.connect((HOST, PORT))
+        self.buffer = ""
         
         # Selección de dificultad
         while True:
@@ -27,7 +28,14 @@ class Client:
 
     # Recibe un mensaje del servidor
     def recibir(self):
-        return self.sock.recv(1024).decode()
+        while True:
+            if "\n" in self.buffer:
+                line, self.buffer = self.buffer.split("\n", 1)
+                return line
+            data = self.sock.recv(1024).decode()
+            if not data:
+                return None
+            self.buffer += data
 
     # Cierra la conexión
     def cerrar(self):
@@ -56,6 +64,8 @@ def main():
     try:
         while True:
             mensaje = cliente.recibir()
+            if not mensaje:
+                break
             if mensaje == "INICIO":
                 print("¡Partida iniciada!")
             elif mensaje.startswith("ACTUALIZACION:"):

@@ -19,7 +19,7 @@ class Server:
         if dificultad in self.partidas:
             for cliente in self.partidas[dificultad]['clientes']:
                 try:
-                    cliente.send(mensaje.encode())
+                    cliente.send(f"{mensaje}\n".encode()s)
                 except:
                     self.manejar_desconexion(cliente, dificultad)
 
@@ -32,7 +32,7 @@ class Server:
 
     # Valida si hay cupo en la partida según la dificultad
     def validar_partida(self, dificultad):
-        max_jugadores = 2 if dificultad == 'F' else 5
+        max_jugadores = 2  # Cambiado a 2 para ambas dificultades
         if dificultad not in self.partidas:
             self.partidas[dificultad] = {
                 'clientes': [],
@@ -41,8 +41,11 @@ class Server:
             }
         return len(self.partidas[dificultad]['clientes']) < max_jugadores
 
-    # Hilo para manejar cada cliente
+    # Metodo para manejar cada cliente
     def handle_client(self, cliente):
+        addr = cliente.getpeername() #Se va a ver los clientes en el servidor
+        print(f"Nueva conexión aceptada desde: {addr}")
+        
         try:
             dificultad = cliente.recv(1024).decode().strip().upper()
             if not self.validar_partida(dificultad):
@@ -53,7 +56,7 @@ class Server:
             # Agregar cliente a la partida
             partida = self.partidas[dificultad]
             partida['clientes'].append(cliente)
-            self.broadcast(f"JUGADOR_CONECTADO:{len(partida['clientes']}", dificultad)
+            self.broadcast(f"JUGADOR_CONECTADO:{len(partida['clientes'])}", dificultad)
 
             # Iniciar partida cuando esté completa
             if len(partida['clientes']) == partida['max_jugadores']:
@@ -68,17 +71,20 @@ class Server:
         partida = self.partidas[dificultad]
         matrix = partida['matrix']
         jugadores = partida['clientes']
-        turno = 0  # Índice del jugador actual
+        turno = 0
+
+        # Enviar el tablero vacío inicial a todos los clientes
+        self.broadcast(f"ACTUALIZACION:{','.join(matrix.matriz)}", dificultad)
 
         while True:
             jugador_actual = jugadores[turno % len(jugadores)]
             try:
-                jugador_actual.send("TURNO".encode())
-                movimiento = jugador_actual.recv(1024).decode()
+                jugador_actual.send("TURNO\n".encode())
+                movimiento = jugador_actual.recv(1024).decode().strip()
 
                 # Validar movimiento
                 if not matrix.es_movimiento_valido(movimiento):
-                    jugador_actual.send("ERROR:Movimiento inválido".encode())
+                    jugador_actual.send("ERROR:Movimiento inválido\n".encode())
                     continue
 
                 # Actualizar tablero y notificar
