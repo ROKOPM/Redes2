@@ -87,6 +87,10 @@ def main():
             elif mensaje == "JUGADOR_DESCONECTADO":
                 print("¡Un jugador se desconectó!")
                 break
+            # Nuevo: Manejar mensaje de timeout del servidor
+            elif mensaje == "No se encontraron mas jugadores":
+                print("No se encontraron mas jugadores")
+                break
     finally:
         cliente.cerrar()
 

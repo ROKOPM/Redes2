@@ -1,6 +1,7 @@
 import socket
 import random
 import threading
+import time  # Nuevo: Import para manejar el tiempo
 
 HOST = "192.168.1.13"
 PORT = 65431
@@ -13,6 +14,37 @@ class Server:
         self.server.listen(5)
         self.partidas = {}  # {dificultad: {'clientes': [], 'matrix': Matrix, 'max_jugadores': int}}
         print("Servidor listo. Esperando conexiones...")
+
+        # Nuevo: Hilo que verifica partidas sin jugadores por 1 minuto
+        threading.Thread(target=self._verificar_partidas_incompletas, daemon=True).start()
+
+    # ========== Método nuevo para validación de tiempo ==========
+    def _verificar_partidas_incompletas(self):
+        """Elimina partidas que llevan más de 1 minuto sin completarse"""
+        while True:
+            tiempo_actual = time.time()
+            partidas_a_eliminar = []
+            
+            for dificultad, partida in self.partidas.items():
+                tiempo_transcurrido = tiempo_actual - partida['start_time']
+                jugadores_conectados = len(partida['clientes'])
+                
+                # Validar si pasó 1 minuto y faltan jugadores
+                if tiempo_transcurrido > 60 and jugadores_conectados < partida['max_jugadores']:
+                    partidas_a_eliminar.append(dificultad)
+                    for cliente in partida['clientes']:
+                        try:
+                            cliente.send("No se encontraron mas jugadores\n".encode())
+                            cliente.close()
+                        except:
+                            pass
+            
+            # Eliminar partidas fuera del loop para evitar errores
+            for dificultad in partidas_a_eliminar:
+                del self.partidas[dificultad]
+            
+            time.sleep(5)  # Revisar cada 5 segundos
+    # ============================================================
 
     # Envía un mensaje a todos los clientes de una partida
     def broadcast(self, mensaje, dificultad):
@@ -37,7 +69,8 @@ class Server:
             self.partidas[dificultad] = {
                 'clientes': [],
                 'matrix': Matrix(3 if dificultad == 'F' else 5),
-                'max_jugadores': max_jugadores
+                'max_jugadores': max_jugadores,
+                'start_time': time.time()  # Nuevo: Registra inicio de la partida
             }
         return len(self.partidas[dificultad]['clientes']) < max_jugadores
 
