@@ -12,7 +12,7 @@ class Server:
         self.server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         self.server.bind((HOST, PORT))
         self.server.listen(5)
-        self.partidas = {}  # {dificultad: {'clientes': [], 'matrix': Matrix, 'max_jugadores': int}}
+        self.partidas = {}  
         print("Servidor listo. Esperando conexiones...")
 
         # Nuevo: Hilo que verifica partidas sin jugadores por 1 minuto
@@ -143,7 +143,7 @@ class Server:
         del self.partidas[dificultad]
         for c in jugadores:
             c.close()
-
+#Este metodo de aca inicializa los hilos para los clientes
     def start(self):
         while True:
             cliente, addr = self.server.accept()

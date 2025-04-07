@@ -57,6 +57,7 @@ class Matrix:
             if i + self.size < len(self.matriz):
                 print("\t  " + "-"*(self.size*4 - 1))
 
+#Envios del cliente para el servidor
 def main():
     cliente = Client()
     matrix = None
