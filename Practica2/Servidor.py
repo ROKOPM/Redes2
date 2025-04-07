@@ -19,7 +19,7 @@ class Server:
         if dificultad in self.partidas:
             for cliente in self.partidas[dificultad]['clientes']:
                 try:
-                    cliente.send(f"{mensaje}\n".encode()s)
+                    cliente.send(f"{mensaje}\n".encode())
                 except:
                     self.manejar_desconexion(cliente, dificultad)
 
