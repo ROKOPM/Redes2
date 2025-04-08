@@ -86,9 +86,9 @@ def main():
                 print("¡Empate!")
                 break
             elif mensaje == "JUGADOR_DESCONECTADO":
-                print("¡Un jugador se desconectó!")
-                break
-            # Nuevo: Manejar mensaje de timeout del servidor
+                print("¡Un jugador se desconectó! Esperando a que alguien se una para reiniciar la partida...")
+                matrix = None  # Limpiar el tablero
+            # timeout del servidor
             elif mensaje == "No se encontraron mas jugadores":
                 print("No se encontraron mas jugadores")
                 break
