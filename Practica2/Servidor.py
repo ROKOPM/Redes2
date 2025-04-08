@@ -11,7 +11,7 @@ class Server:
         self.server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         self.server.bind((HOST, PORT))
         self.server.listen(5)
-        self.partidas = {} # Diccionario para rastreo de partidas
+        self.partidas = {}  # Diccionario para rastreo de partidas
         self.hilos_activos = {}  # Diccionario para rastrear hilos
         print("Servidor listo. Esperando conexiones...")
 
@@ -38,32 +38,6 @@ class Server:
             print("=" * 40 + "\n")
             time.sleep(10)
 
-    def _verificar_partidas_incompletas(self):
-        """Elimina partidas inactivas o en espera por más de 60 segundos"""
-        while True:
-            tiempo_actual = time.time()
-            partidas_a_eliminar = []
-
-            for dificultad, partida in list(self.partidas.items()):
-                if partida['estado'] == 'espera_reconexion':
-                    if tiempo_actual - partida['tiempo_espera'] > 60:
-                        partidas_a_eliminar.append(dificultad)
-                        print(f"[!] Partida {dificultad} cerrada por timeout de reconexión.")
-                elif tiempo_actual - partida['inicio'] > 60 and len(partida['clientes']) < partida['max_jugadores']:
-                    partidas_a_eliminar.append(dificultad)
-                    print(f"[!] Partida {dificultad} eliminada por inactividad.")
-
-            for dificultad in partidas_a_eliminar:
-                for cliente in self.partidas[dificultad]['clientes']:
-                    try:
-                        cliente.send("No se encontraron más jugadores\n".encode())
-                        cliente.close()
-                    except:
-                        pass
-                del self.partidas[dificultad]
-
-            time.sleep(5)
-
     def broadcast(self, mensaje, dificultad):
         if dificultad in self.partidas:
             for cliente in self.partidas[dificultad]['clientes']:
@@ -89,9 +63,9 @@ class Server:
         max_jugadores = 2
         if dificultad in self.partidas:
             partida = self.partidas[dificultad]
-            if partida['estado'] in ['creada', 'espera_reconexion'] and len(partida['clientes']) < max_jugadores:
-                return True
-            return False
+            if partida['estado'] == 'activa' or len(partida['clientes']) >= max_jugadores:
+                return False  # No se puede unirse si la partida ya está activa o llena
+            return True
         else:
             self.partidas[dificultad] = {
                 'clientes': [],
@@ -112,7 +86,7 @@ class Server:
         try:
             dificultad = cliente.recv(1024).decode().strip().upper()
             if not self.validar_partida(dificultad):
-                cliente.send("ERROR:Partida llena".encode())
+                cliente.send("ERROR: Partida llena o activa".encode())
                 cliente.close()
                 return
 
@@ -125,7 +99,9 @@ class Server:
                 print(f"[*] Partida {dificultad} iniciada.")
                 self.iniciar_juego(dificultad)
             else:
+                partida['estado'] = 'waiting'
                 cliente.send("Esperando más jugadores...\n".encode())
+                self.broadcast(f"Partida {dificultad} está en estado 'waiting'.", dificultad)
 
         except Exception as e:
             print(f"[ERROR] En handle_client: {e}")
@@ -169,7 +145,7 @@ class Server:
                     break
 
         if partida['estado'] == 'activa':
-    # Solo se elimina si terminó normalmente
+            # Solo se elimina si terminó normalmente
             for c in jugadores:
                 try:
                     c.close()
@@ -180,15 +156,18 @@ class Server:
         else:
             print(f"Partida {dificultad} en espera de reconexión. No se eliminará.")
 
-
     def start(self):
         while True:
-            cliente, addr = self.server.accept()
-            hilo = threading.Thread(target=self.handle_client, args=(cliente,))
-            hilo.start()
-            self.hilos_activos[hilo.ident] = hilo  # Registrar hilo
-
-
+            try:
+                cliente, addr = self.server.accept()
+                hilo = threading.Thread(target=self.handle_client, args=(cliente,))
+                hilo.start()
+                self.hilos_activos[hilo.ident] = hilo  # Registrar hilo
+            except KeyboardInterrupt:
+                print("\n[!] Cierre del servidor solicitado por el usuario.")
+                self.cerrar_servidor()
+                break
+        
 class Matrix:
     def __init__(self, size):
         self.size = size
