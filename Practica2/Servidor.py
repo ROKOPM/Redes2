@@ -2,7 +2,7 @@ import socket
 import threading
 import time
 
-HOST = "192.168.1.13"
+HOST = "10.100.69.70"
 PORT = 65431
 
 class Server:

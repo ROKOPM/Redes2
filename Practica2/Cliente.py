@@ -1,6 +1,6 @@
 import socket
 
-HOST = "192.168.1.13"
+HOST = "10.100.69.70"
 PORT = 65431
 
 class Client:
@@ -86,7 +86,7 @@ def main():
                 print("¡Empate!")
                 break
             elif mensaje == "JUGADOR_DESCONECTADO":
-                print("¡Un jugador se desconectó! Esperando a que alguien se una para reiniciar la partida...")
+                print("¡Un jugador se desconectó! Esperando a que alguien se una para reanudar la partida...")
                 matrix = None  # Limpiar el tablero
             # timeout del servidor
             elif mensaje == "No se encontraron mas jugadores":
