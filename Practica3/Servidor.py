@@ -90,7 +90,7 @@ class Server:
         print(f"[+] Conexión aceptada desde {addr} (Hilo: {threading.current_thread().name})")
 
         try:
-            cliente.send("Ingrese la dificultad (F/M/D): ".encode())
+            cliente.send("Ingrese la dificultad (F/A): ".encode())
             dificultad = cliente.recv(1024).decode().strip().upper()
             partida = self.obtener_partida_disponible(dificultad)
             if not partida:
