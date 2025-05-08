@@ -14,6 +14,7 @@ class Server:
         self.server.listen(5)
         self.partidas = {}  # Diccionario para rastreo de partidas por dificultad
         self.hilos_activos = {}  # Diccionario para rastrear hilos
+        self.lock = threading.Lock() #Aqui esta lock
         print("Servidor listo. Esperando conexiones...")
 
         # Hilo para monitorear partidas y hilos
@@ -48,43 +49,45 @@ class Server:
                 self.manejar_desconexion(cliente, partida)
 
     def manejar_desconexion(self, cliente, partida):
-        if cliente in partida['clientes']:
-            partida['clientes'].remove(cliente)
-            print(f"[!] Cliente desconectado. Jugadores restantes: {len(partida['clientes'])}")
-            cliente.close()
+        with self.lock:
+            if cliente in partida['clientes']:
+                partida['clientes'].remove(cliente)
+                print(f"[!] Cliente desconectado. Jugadores restantes: {len(partida['clientes'])}")
+                cliente.close()
 
-            if partida['estado'] == 'activa' and len(partida['clientes']) < partida['max_jugadores']:
-                partida['estado'] = 'espera_reconexion'
-                partida['tiempo_espera'] = time.time()
-                self.broadcast("JUGADOR_DESCONECTADO", partida)
-                print(f"[!] Partida en espera de reconexión (60s).")
+                if partida['estado'] == 'activa' and len(partida['clientes']) < partida['max_jugadores']:
+                    partida['estado'] = 'espera_reconexion'
+                    partida['tiempo_espera'] = time.time()
+                    self.broadcast("JUGADOR_DESCONECTADO", partida)
+                    print(f"[!] Partida en espera de reconexión (60s).")
 
     def obtener_partida_disponible(self, dificultad):
-        max_jugadores = 4
-        max_salas = 2
+        with self.lock:
+            max_jugadores = 4
+            max_salas = 2
 
-        if dificultad not in self.partidas:
-            self.partidas[dificultad] = []
+            if dificultad not in self.partidas:
+                self.partidas[dificultad] = []
 
-        for partida in self.partidas[dificultad]:
-            if partida['estado'] != 'activa' and len(partida['clientes']) < max_jugadores:
-                return partida  # Hay una sala disponible
+            for partida in self.partidas[dificultad]:
+                if partida['estado'] != 'activa' and len(partida['clientes']) < max_jugadores:
+                    return partida  # Hay una sala disponible
 
-        if len(self.partidas[dificultad]) < max_salas:
-            nueva_partida = {
-                'clientes': [],
-                'matrix': Matrix(8 if dificultad == 'F' else 12),
-                'max_jugadores': max_jugadores,
-                'inicio': time.time(),
-                'estado': 'creada',
-                'tiempo_espera': None,
-                'turno': 0
-            }
-            self.partidas[dificultad].append(nueva_partida)
-            print(f"Partida nueva creada para dificultad {dificultad}. Total: {len(self.partidas[dificultad])} salas.")
-            return nueva_partida
+            if len(self.partidas[dificultad]) < max_salas:
+                nueva_partida = {
+                    'clientes': [],
+                    'matrix': Matrix(8 if dificultad == 'F' else 12),
+                    'max_jugadores': max_jugadores,
+                    'inicio': time.time(),
+                    'estado': 'creada',
+                    'tiempo_espera': None,
+                    'turno': 0
+                }
+                self.partidas[dificultad].append(nueva_partida)
+                print(f"Partida nueva creada para dificultad {dificultad}. Total: {len(self.partidas[dificultad])} salas.")
+                return nueva_partida
 
-        return None  # No hay salas disponibles
+            return None  # No hay salas disponibles
 
     def handle_client(self, cliente):
         addr = cliente.getpeername()

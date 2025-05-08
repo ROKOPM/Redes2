@@ -96,7 +96,7 @@ def main():
                 print("No se encontraron más jugadores.")
                 break
             else:
-                print(mensaje)  # Mensajes generales (ej. 'waiting')
+                print(mensaje)  # Mensajes generales
     finally:
         cliente.cerrar()
 
