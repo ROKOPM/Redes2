@@ -37,7 +37,24 @@ class Server:
                     estado = partida['estado']
                     jugadores = len(partida['clientes'])
                     print(f"  - {dificultad} (Sala {idx + 1}): {estado} ({jugadores}/{partida['max_jugadores']} jugadores)")
+            
+            #Cancelar partida tras tiempo de espera
+                    if estado == 'espera_reconexion' and time.time() - partida['tiempo_espera'] > 60:
+                        print(f"[!] La partida {dificultad} (Sala {idx + 1}) ha excedido el tiempo de espera. Cancelando...")
+                        self.broadcast("PARTIDA_CANCELADA", partida)
 
+                    # Cerrar todas las conexiones de los jugadores
+                        for cliente in partida['clientes']:
+                            try:
+                                cliente.send("La partida ha sido cancelada por tiempo de espera.\n".encode())
+                                cliente.close()
+                            except:
+                                pass
+                    
+                    # Eliminar la partida de la lista
+                        self.partidas[dificultad].remove(partida)
+                        print(f"Partida {dificultad} (Sala {idx + 1}) eliminada.")
+                    
             print("=" * 40 + "\n")
             time.sleep(10)
 
@@ -226,16 +243,59 @@ class Matrix:
             return False
 
     def ganador(self, simbolo):
-        for i in range(self.size):
-            # Revisa filas y columnas
-            if all(self.matriz[i * self.size + j] == simbolo for j in range(self.size)):
-                return True
-            if all(self.matriz[j * self.size + i] == simbolo for j in range(self.size)):
-                return True
-        #Y este revisa diagonaless    
-        diag1 = all(self.matriz[i * self.size + i] == simbolo for i in range(self.size))
-        diag2 = all(self.matriz[i * self.size + (self.size - 1 - i)] == simbolo for i in range(self.size))
-        return diag1 or diag2
+        objetivo = 4 if self.size == 8 else 6
+
+        # Revisión horizontal
+        for fila in range(self.size):
+            contador = 0
+            for col in range(self.size):
+                idx = fila * self.size + col
+                if self.matriz[idx] == simbolo:
+                    contador += 1
+                    if contador >= objetivo:
+                        return True
+                else:
+                    contador = 0
+
+        # Revisión vertical
+        for col in range(self.size):
+            contador = 0
+            for fila in range(self.size):
+                idx = fila * self.size + col
+                if self.matriz[idx] == simbolo:
+                    contador += 1
+                    if contador >= objetivo:
+                        return True
+                else:
+                    contador = 0
+
+        # Revisión diagonal ↘ (de izquierda arriba a derecha abajo)
+        for fila in range(self.size - objetivo + 1):
+            for col in range(self.size - objetivo + 1):
+                contador = 0
+                for k in range(objetivo):
+                    idx = (fila + k) * self.size + (col + k)
+                    if self.matriz[idx] == simbolo:
+                        contador += 1
+                        if contador >= objetivo:
+                            return True
+                    else:
+                        break
+
+        # Revisión diagonal ↙ (de derecha arriba a izquierda abajo)
+        for fila in range(self.size - objetivo + 1):
+            for col in range(objetivo - 1, self.size):
+                contador = 0
+                for k in range(objetivo):
+                    idx = (fila + k) * self.size + (col - k)
+                    if self.matriz[idx] == simbolo:
+                        contador += 1
+                        if contador >= objetivo:
+                            return True
+                    else:
+                        break
+
+        return False
 
     def empate(self):
         return ' ' not in self.matriz
