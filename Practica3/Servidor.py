@@ -245,7 +245,7 @@ class Matrix:
     def ganador(self, simbolo):
         objetivo = 4 if self.size == 8 else 6
 
-        # Revisión horizontal
+        #horizontal
         for fila in range(self.size):
             contador = 0
             for col in range(self.size):
@@ -257,7 +257,7 @@ class Matrix:
                 else:
                     contador = 0
 
-        # Revisión vertical
+        #vertical
         for col in range(self.size):
             contador = 0
             for fila in range(self.size):
@@ -269,7 +269,7 @@ class Matrix:
                 else:
                     contador = 0
 
-        # Revisión diagonal ↘ (de izquierda arriba a derecha abajo)
+        #diagonal (de izquierda arriba a derecha abajo)
         for fila in range(self.size - objetivo + 1):
             for col in range(self.size - objetivo + 1):
                 contador = 0
@@ -282,7 +282,7 @@ class Matrix:
                     else:
                         break
 
-        # Revisión diagonal ↙ (de derecha arriba a izquierda abajo)
+        # diagonal (de derecha arriba a izquierda abajo)
         for fila in range(self.size - objetivo + 1):
             for col in range(objetivo - 1, self.size):
                 contador = 0
