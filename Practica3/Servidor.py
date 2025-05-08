@@ -1,6 +1,7 @@
 import socket
 import threading
 import time
+import string
 
 HOST = "192.168.1.16"
 PORT = 65431
@@ -59,8 +60,8 @@ class Server:
                 print(f"[!] Partida en espera de reconexión (60s).")
 
     def obtener_partida_disponible(self, dificultad):
-        max_jugadores = 2
-        max_salas = 5
+        max_jugadores = 4
+        max_salas = 2
 
         if dificultad not in self.partidas:
             self.partidas[dificultad] = []
@@ -72,7 +73,7 @@ class Server:
         if len(self.partidas[dificultad]) < max_salas:
             nueva_partida = {
                 'clientes': [],
-                'matrix': Matrix(3 if dificultad == 'F' else 5),
+                'matrix': Matrix(8 if dificultad == 'F' else 12),
                 'max_jugadores': max_jugadores,
                 'inicio': time.time(),
                 'estado': 'creada',
@@ -121,8 +122,15 @@ class Server:
         self.broadcast("INICIO", partida)
         self.broadcast(f"ACTUALIZACION:{','.join(matrix.matriz)}", partida)
 
+        simbolos = ['X', 'O', '!', '$']
+        for i, jugador in enumerate(jugadores):
+            try:
+                jugador.send(f"Partida iniciada! Tu símbolo es: {simbolos[i]}\n".encode())
+            except:
+                  self.manejar_desconexion(jugador, partida)
+        
         while partida['estado'] == 'activa':
-            jugador_actual = jugadores[turno % 2]
+            jugador_actual = jugadores[turno % 4]
             try:
                 jugador_actual.send("TURNO\n".encode())
                 movimiento = jugador_actual.recv(1024).decode().strip()
@@ -131,7 +139,7 @@ class Server:
                     jugador_actual.send("ERROR:Movimiento inválido\n".encode())
                     continue
 
-                simbolo = 'X' if turno % 2 == 0 else 'O'
+                simbolo =  simbolos[turno % 4]
                 matrix.agregar(simbolo, movimiento)
                 self.broadcast(f"ACTUALIZACION:{','.join(matrix.matriz)}", partida)
 
@@ -184,13 +192,20 @@ class Matrix:
         self.matriz = [' ' for _ in range(size * size)]
 
     def cast(self, pos):
-        if len(pos) != 2:
+        if len(pos) < 2 or len(pos) > 3:
             raise ValueError("Formato inválido")
         letra = pos[0].upper()
-        num = pos[1]
-        letras_validas = 'ABCDE'[:self.size]
-        if letra not in letras_validas or not num.isdigit():
-            raise ValueError("Posición inválida")
+        num = pos[1:]
+        
+        #Validar columnas
+        letras_validas = string.ascii_uppercase [:self.size]
+        if letra not in letras_validas:
+            raise ValueError("Posición inválida: columna fuera de rango")
+        
+        #Validar filas
+        if not num.isdigit() or not (1 <= int(num) <= self.size):
+            raise ValueError("Posición inválida: fila fuera de rango")
+        
         fila = int(num) - 1
         columna = letras_validas.index(letra)
         return fila * self.size + columna
@@ -204,15 +219,17 @@ class Matrix:
         try:
             idx = self.cast(pos)
             return self.matriz[idx] == ' '
-        except:
+        except ValueError:
             return False
 
     def ganador(self, simbolo):
         for i in range(self.size):
+            # Revisa filas y columnas
             if all(self.matriz[i * self.size + j] == simbolo for j in range(self.size)):
                 return True
             if all(self.matriz[j * self.size + i] == simbolo for j in range(self.size)):
                 return True
+        #Y este revisa diagonaless    
         diag1 = all(self.matriz[i * self.size + i] == simbolo for i in range(self.size))
         diag2 = all(self.matriz[i * self.size + (self.size - 1 - i)] == simbolo for i in range(self.size))
         return diag1 or diag2

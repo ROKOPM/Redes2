@@ -1,4 +1,5 @@
 import socket
+import string
 
 HOST = "192.168.1.16"
 PORT = 65431
@@ -48,7 +49,7 @@ class Matrix:
 
     # Muestra el tablero
     def mostrar(self):
-        letras = 'ABCDE'[:self.size]
+        letras = list(string.ascii_uppercase[:self.size])
         print("\nTablero:")
         print("\t   " + "   ".join(letras))
         for i in range(0, len(self.matriz), self.size):
@@ -89,9 +90,13 @@ def main():
                 print("¡Un jugador se desconectó! Esperando a que alguien se una para reanudar la partida...")
                 matrix = None  # Limpiar el tablero
             # timeout del servidor
+            elif mensaje.startswith("ERROR:"):
+                print(mensaje.split(":", 1)[1])
             elif mensaje == "No se encontraron mas jugadores":
-                print("No se encontraron mas jugadores")
+                print("No se encontraron más jugadores.")
                 break
+            else:
+                print(mensaje)  # Mensajes generales (ej. 'waiting')
     finally:
         cliente.cerrar()
 
