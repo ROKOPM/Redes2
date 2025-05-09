@@ -2,6 +2,7 @@ import socket
 import threading
 import time
 import string
+from collections import deque
 
 HOST = "192.168.1.16"
 PORT = 65431
@@ -72,12 +73,16 @@ class Server:
                 print(f"[!] Cliente desconectado. Jugadores restantes: {len(partida['clientes'])}")
                 cliente.close()
 
+            # Remover de la cola de turnos
+                partida['turno_cola'] = deque([c for c in partida['turno_cola'] if c != cliente])
+
                 if partida['estado'] == 'activa' and len(partida['clientes']) < partida['max_jugadores']:
                     partida['estado'] = 'espera_reconexion'
                     partida['tiempo_espera'] = time.time()
                     self.broadcast("JUGADOR_DESCONECTADO", partida)
                     print(f"[!] Partida en espera de reconexión (60s).")
 
+    
     def obtener_partida_disponible(self, dificultad):
         with self.lock:
             max_jugadores = 4
@@ -98,6 +103,7 @@ class Server:
                     'inicio': time.time(),
                     'estado': 'creada',
                     'tiempo_espera': None,
+                    'turno_cola': deque(),
                     'turno': 0
                 }
                 self.partidas[dificultad].append(nueva_partida)
@@ -120,6 +126,7 @@ class Server:
                 return
 
             partida['clientes'].append(cliente)
+            partida['turno_cola'].append(cliente)
             print(f"[+] Jugador unido a {dificultad}. Total: {len(partida['clientes'])}")
 
             if len(partida['clientes']) == partida['max_jugadores']:
@@ -137,20 +144,26 @@ class Server:
     def iniciar_juego(self, partida, dificultad):
         matrix = partida['matrix']
         jugadores = partida['clientes']
-        turno = partida['turno']
+
+        # Asignar símbolos a cada jugador y almacenarlos
+        simbolos_list = ['X', 'O', '!', '$']
+        partida['simbolos'] = {}
+        for i, jugador in enumerate(jugadores):
+            partida['simbolos'][jugador] = simbolos_list[i]
+            try:
+                jugador.send(f"Partida iniciada! Tu símbolo es: {simbolos_list[i]}\n".encode())
+            except:
+                self.manejar_desconexion(jugador, partida)
 
         self.broadcast("INICIO", partida)
         self.broadcast(f"ACTUALIZACION:{','.join(matrix.matriz)}", partida)
 
-        simbolos = ['X', 'O', '!', '$']
-        for i, jugador in enumerate(jugadores):
-            try:
-                jugador.send(f"Partida iniciada! Tu símbolo es: {simbolos[i]}\n".encode())
-            except:
-                  self.manejar_desconexion(jugador, partida)
-        
         while partida['estado'] == 'activa':
-            jugador_actual = jugadores[turno % 4]
+            # Si la cola está vacía
+            if not partida['turno_cola']:  
+                break
+
+            jugador_actual = partida['turno_cola'][0]
             try:
                 jugador_actual.send("TURNO\n".encode())
                 movimiento = jugador_actual.recv(1024).decode().strip()
@@ -159,7 +172,7 @@ class Server:
                     jugador_actual.send("ERROR:Movimiento inválido\n".encode())
                     continue
 
-                simbolo =  simbolos[turno % 4]
+                simbolo = partida['simbolos'][jugador_actual]
                 matrix.agregar(simbolo, movimiento)
                 self.broadcast(f"ACTUALIZACION:{','.join(matrix.matriz)}", partida)
 
@@ -170,8 +183,8 @@ class Server:
                     self.broadcast("EMPATE", partida)
                     break
 
-                turno += 1
-                partida['turno'] = turno
+                # Rotar al siguiente jugador
+                partida['turno_cola'].rotate(-1)
 
             except:
                 self.manejar_desconexion(jugador_actual, partida)
@@ -179,7 +192,7 @@ class Server:
                     break
 
         if partida['estado'] == 'activa':
-            # Solo se elimina si terminó normalmente
+            # Cerrar conexiones y limpiar
             for c in jugadores:
                 try:
                     c.close()
@@ -187,8 +200,6 @@ class Server:
                     pass
             self.partidas[dificultad].remove(partida)
             print(f"Partida {dificultad} finalizada.")
-        else:
-            print(f"Partida {dificultad} en espera de reconexión. No se eliminará.")
 
     def start(self):
         while True:
